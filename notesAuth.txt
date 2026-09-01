@@ -1,0 +1,540 @@
+AUTHENTICATION IS `betterAuth` 
+NOTES (
+    Perfect choice! BetterAuth has excellent support for both **passkeys (WebAuthn)** and **2-factor authentication**. Here's how to implement both:
+
+## **Passkeys Implementation with BetterAuth**
+
+### **1. Setup Passkeys**
+
+```typescript
+// lib/auth.ts
+import { betterAuth } from "better-auth"
+import { prisma } from "@/lib/prisma"
+
+export const auth = betterAuth({
+  database: prisma,
+  
+  // Enable passkeys
+  passkey: {
+    enabled: true,
+    // Advanced options
+    origin: process.env.APP_URL || "http://localhost:3000",
+    rpName: "Clicon Ecommerce",
+    rpID: process.env.RP_ID || "localhost",
+    timeout: 60000, // 60 seconds
+    attestationPreference: "direct",
+    authenticatorAttachment: "platform",
+    userVerification: "preferred"
+  },
+  
+  // Optional: Traditional auth as backup
+  emailAndPassword: {
+    enabled: true,
+    requireEmailVerification: true
+  }
+})
+```
+
+### **2. Database Schema for Passkeys**
+
+```prisma
+// schema.prisma
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  emailVerified Boolean   @default(false)
+  image         String?
+  createdAt     DateTime  @default(now())
+  
+  // Passkey related
+  passkeys      Passkey[]
+  twoFactorSecrets TwoFactorSecret[]
+}
+
+model Passkey {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // WebAuthn data
+  credentialId String   @unique
+  publicKey    String
+  counter      BigInt
+  deviceType   String?
+  transports   String?
+  name         String?  // User-friendly name for the passkey
+  backupEligible Boolean @default(false)
+  backupStatus Boolean   @default(false)
+  
+  createdAt    DateTime @default(now())
+  lastUsedAt   DateTime?
+}
+```
+
+### **3. Passkey Registration Flow**
+
+```typescript
+// app/api/auth/passkeys/register/route.ts
+import { auth } from "@/lib/auth"
+import { headers } from "next/headers"
+
+export async function POST(req: Request) {
+  const body = await req.json()
+  const session = await auth.api.getSession({
+    headers: await headers()
+  })
+  
+  if (!session) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 })
+  }
+  
+  // Generate passkey registration options
+  const options = await auth.api.generatePasskeyRegistrationOptions({
+    body: {
+      userId: session.user.id,
+      name: body.name || "My Passkey"
+    }
+  })
+  
+  return Response.json(options)
+}
+```
+
+```typescript
+// app/api/auth/passkeys/register/verify/route.ts
+import { auth } from "@/lib/auth"
+import { headers } from "next/headers"
+
+export async function POST(req: Request) {
+  const body = await req.json()
+  const session = await auth.api.getSession({
+    headers: await headers()
+  })
+  
+  // Verify passkey registration
+  const result = await auth.api.verifyPasskeyRegistration({
+    body: {
+      userId: session.user.id,
+      registrationResponse: body.registrationResponse,
+      name: body.name
+    }
+  })
+  
+  return Response.json({ success: true, passkey: result.passkey })
+}
+```
+
+### **4. Passkey Authentication Flow**
+
+```typescript
+// app/api/auth/passkeys/authenticate/options/route.ts
+import { auth } from "@/lib/auth"
+
+export async function POST(req: Request) {
+  const body = await req.json()
+  
+  // Generate authentication options
+  const options = await auth.api.generatePasskeyAuthenticationOptions({
+    body: {
+      email: body.email // or userId for specific user
+    }
+  })
+  
+  return Response.json(options)
+}
+```
+
+```typescript
+// app/api/auth/passkeys/authenticate/verify/route.ts
+import { auth } from "@/lib/auth"
+
+export async function POST(req: Request) {
+  const body = await req.json()
+  
+  // Verify passkey authentication
+  const result = await auth.api.verifyPasskeyAuthentication({
+    body: {
+      authenticationResponse: body.authenticationResponse
+    }
+  })
+  
+  // Create session
+  const session = await auth.api.getSession({
+    headers: new Headers({
+      cookie: `better-auth.session_token=${result.sessionToken}`
+    })
+  })
+  
+  return Response.json({ success: true, session })
+}
+```
+
+### **5. Frontend Passkey Registration**
+
+```typescript
+// components/passkey-registration.tsx
+"use client"
+
+import { useState } from "react"
+import { Button } from "@/components/ui/button"
+
+export function PasskeyRegistration() {
+  const [isLoading, setIsLoading] = useState(false)
+  
+  const registerPasskey = async (name: string) => {
+    setIsLoading(true)
+    
+    try {
+      // Step 1: Get registration options
+      const optionsRes = await fetch('/api/auth/passkeys/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name })
+      })
+      const options = await optionsRes.json()
+      
+      // Step 2: Use WebAuthn API
+      const credential = await navigator.credentials.create({
+        publicKey: options
+      })
+      
+      // Step 3: Verify registration
+      const verifyRes = await fetch('/api/auth/passkeys/register/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          registrationResponse: credential,
+          name
+        })
+      })
+      
+      const result = await verifyRes.json()
+      console.log('Passkey registered!', result)
+      
+    } catch (error) {
+      console.error('Passkey registration failed:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+  
+  return (
+    <Button onClick={() => registerPasskey("My Device")} disabled={isLoading}>
+      {isLoading ? "Registering..." : "Register Passkey"}
+    </Button>
+  )
+}
+```
+
+## **2-Factor Authentication Implementation**
+
+### **1. Enable 2FA in BetterAuth**
+
+```typescript
+// lib/auth.ts
+import { betterAuth } from "better-auth"
+import { twoFactor, totp } from "better-auth/plugins"
+
+export const auth = betterAuth({
+  database: prisma,
+  
+  // Enable 2FA plugin
+  plugins: [
+    twoFactor({
+      // TOTP (Time-based One-Time Password)
+      totp: {
+        enabled: true,
+        issuer: "Clicon Ecommerce",
+        digits: 6,
+        period: 30, // 30 seconds
+        algorithm: "SHA1"
+      },
+      
+      // Backup codes
+      backupCodes: {
+        enabled: true,
+        count: 10
+      }
+    })
+  ]
+})
+```
+
+### **2. Database Schema for 2FA**
+
+```prisma
+// schema.prisma
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  
+  // 2FA related
+  twoFactorSecrets TwoFactorSecret[]
+  twoFactorInvalidateTwoFactorInvalidate TwoFactorInvalidate[]
+}
+
+model TwoFactorSecret {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  secret    String   // TOTP secret
+  enabled   Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model TwoFactorInvalidate {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  code      String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+```
+
+### **3. Enable 2FA for User**
+
+```typescript
+// app/api/auth/2fa/enable/route.ts
+import { auth } from "@/lib/auth"
+import { headers } from "next/headers"
+
+export async function POST(req: Request) {
+  const session = await auth.api.getSession({
+    headers: await headers()
+  })
+  
+  if (!session) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 })
+  }
+  
+  // Generate TOTP secret
+  const secret = await auth.api.generateTwoFactorSecret({
+    body: {
+      userId: session.user.id
+    }
+  })
+  
+  return Response.json({
+    secret: secret.secret,
+    qrCode: secret.qrCode // QR code for authenticator apps
+  })
+}
+```
+
+### **4. Verify and Enable 2FA**
+
+```typescript
+// app/api/auth/2fa/verify/route.ts
+import { auth } from "@/lib/auth"
+import { headers } from "next/headers"
+
+export async function POST(req: Request) {
+  const body = await req.json()
+  const session = await auth.api.getSession({
+    headers: await headers()
+  })
+  
+  // Verify TOTP code
+  const verified = await auth.api.verifyTwoFactor({
+    body: {
+      userId: session.user.id,
+      code: body.code
+    }
+  })
+  
+  if (verified) {
+    // Enable 2FA for user
+    await auth.api.enableTwoFactor({
+      body: {
+        userId: session.user.id
+      }
+    })
+    
+    return Response.json({ success: true })
+  }
+  
+  return Response.json({ error: "Invalid code" }, { status: 400 })
+}
+```
+
+### **5. 2FA Login Flow**
+
+```typescript
+// app/api/auth/2fa/login/route.ts
+import { auth } from "@/lib/auth"
+
+export async function POST(req: Request) {
+  const body = await req.json()
+  
+  // Step 1: Initial login (email/password or passkey)
+  const loginResult = await auth.api.signIn({
+    body: {
+      email: body.email,
+      password: body.password
+    }
+  })
+  
+  // Step 2: Check if 2FA is enabled
+  if (loginResult.twoFactorEnabled) {
+    return Response.json({
+      requiresTwoFactor: true,
+      userId: loginResult.user.id
+    })
+  }
+  
+  // Step 3: If no 2FA, return session
+  return Response.json({
+    requiresTwoFactor: false,
+    session: loginResult.session
+  })
+}
+```
+
+```typescript
+// app/api/auth/2fa/verify-login/route.ts
+import { auth } from "@/lib/auth"
+
+export async function POST(req: Request) {
+  const body = await req.json()
+  
+  // Verify 2FA code during login
+  const verified = await auth.api.verifyTwoFactor({
+    body: {
+      userId: body.userId,
+      code: body.code
+    }
+  })
+  
+  if (verified) {
+    // Create session after 2FA verification
+    const session = await auth.api.createSession({
+      body: {
+        userId: body.userId
+      }
+    })
+    
+    return Response.json({ success: true, session })
+  }
+  
+  return Response.json({ error: "Invalid 2FA code" }, { status: 400 })
+}
+```
+
+### **6. Frontend 2FA Components**
+
+```typescript
+// components/two-factor-setup.tsx
+"use client"
+
+import { useState } from "react"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+
+export function TwoFactorSetup() {
+  const [step, setStep] = useState<'generate' | 'verify'>('generate')
+  const [qrCode, setQrCode] = useState<string>("")
+  const [code, setCode] = useState("")
+  
+  const enableTwoFactor = async () => {
+    // Generate TOTP secret
+    const res = await fetch('/api/auth/2fa/enable', { method: 'POST' })
+    const data = await res.json()
+    setQrCode(data.qrCode)
+    setStep('verify')
+  }
+  
+  const verifyTwoFactor = async () => {
+    const res = await fetch('/api/auth/2fa/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code })
+    })
+    
+    if (res.ok) {
+      alert("2FA enabled successfully!")
+    } else {
+      alert("Invalid code")
+    }
+  }
+  
+  return (
+    <div>
+      {step === 'generate' && (
+        <Button onClick={enableTwoFactor}>Enable 2FA</Button>
+      )}
+      
+      {step === 'verify' && (
+        <div>
+          <img src={qrCode} alt="QR Code" />
+          <p>Scan with your authenticator app</p>
+          <Input 
+            value={code} 
+            onChange={(e) => setCode(e.target.value)}
+            placeholder="Enter 6-digit code"
+          />
+          <Button onClick={verifyTwoFactor}>Verify</Button>
+        </div>
+      )}
+    </div>
+  )
+}
+```
+
+## **Security Best Practices**
+
+### **1. Rate Limiting**
+```typescript
+// lib/rate-limit.ts
+import { Ratelimit } from "@upstash/ratelimit"
+import { Redis } from "@upstash/redis"
+
+const ratelimit = new Ratelimit({
+  redis: Redis.fromEnv(),
+  limiter: Ratelimit.slidingWindow(5, "10 s"), // 5 attempts per 10 seconds
+})
+
+export async function checkRateLimit(identifier: string) {
+  const { success } = await ratelimit.limit(identifier)
+  return success
+}
+```
+
+### **2. 2FA Enforcement for Sensitive Actions**
+```typescript
+// Require 2FA for vendor dashboard access
+export async function middleware(req: NextRequest) {
+  const session = await getSession(req)
+  
+  if (req.nextUrl.pathname.startsWith('/vendor') && session?.user.role === 'vendor') {
+    if (!session.twoFactorEnabled) {
+      return NextResponse.redirect('/setup-2fa')
+    }
+  }
+}
+```
+
+### **3. Backup Codes**
+```typescript
+// Generate backup codes when enabling 2FA
+const backupCodes = await auth.api.generateBackupCodes({
+  body: { userId: session.user.id }
+})
+
+// Store securely and show to user once
+console.log("Backup codes (save these!):", backupCodes)
+```
+
+## **Implementation Priority**
+
+1. **Start with basic auth** (email/password)
+2. **Add passkeys** (user convenience)
+3. **Add 2FA** (security for sensitive operations)
+4. **Make 2FA optional for customers, required for vendors** (balance UX/security)
+
+This setup gives you modern, secure authentication that's both user-friendly and enterprise-grade. Would you like me to help you integrate this with your existing Next.js frontend?
+)

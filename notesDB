@@ -1,0 +1,550 @@
+DATABASE NEON
+(
+    Perfect choice! **Neon** is an excellent PostgreSQL solution for your ecommerce platform. Let me guide you through setting up Neon and integrating it with your Next.js project.
+
+Perfect! **Neon** is an excellent choice for your ecommerce platform. Here's your complete setup guide for Neon PostgreSQL with betterAuth and Prisma:
+
+## **Why Neon is Perfect for Your Project**
+
+- **Serverless PostgreSQL**: Auto-scaling, pay-as-you-go
+- **Branching**: Database branching for development/testing
+- **Edge-ready**: Global edge deployment for fast queries
+- **Free tier**: Generous free tier for development
+- **Vercel integration**: Seamless deployment with your Next.js app
+- **Backup & time-travel**: Built-in backups and point-in-time recovery
+
+## **Setup Process**
+
+### **1. Create Neon Account & Database**
+
+1. Go to [neon.tech](https://neon.tech) and sign up
+2. Create a new project named "clicon-ecommerce"
+3. Choose your preferred region (closest to your users)
+4. Neon will provide you with a connection string like:
+   ```
+   postgresql://username:password@ep-xyz.region.aws.neon.tech/neondb?sslmode=require
+   ```
+
+### **2. Install Dependencies**
+
+```bash
+# Install Prisma and Neon client
+npm install prisma @prisma/client
+npm install -D prisma
+
+# Install betterAuth
+npm install better-auth
+
+# Install Neon serverless driver (optional but recommended)
+npm install @neondatabase/serverless
+```
+
+### **3. Initialize Prisma**
+
+```bash
+# Initialize Prisma with Neon
+npx prisma init --datasource-provider postgresql
+```
+
+### **4. Configure Environment Variables**
+
+Create `.env` file in your project root:
+
+```env
+# Neon Database Connection
+DATABASE_URL="postgresql://username:password@ep-xyz.region.aws.neon.tech/neondb?sslmode=require"
+
+# BetterAuth Configuration
+BETTER_AUTH_SECRET="your-secret-key-here-generate-a-long-random-string"
+BETTER_AUTH_URL="http://localhost:3000"
+
+# App Configuration
+NEXT_PUBLIC_APP_URL="http://localhost:3000"
+```
+
+### **5. Configure Prisma for Neon**
+
+Update `prisma/schema.prisma`:
+
+```prisma
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  // Neon-specific optimizations
+  directUrl = env("DIRECT_URL") // For migrations
+}
+
+// User and Authentication Models
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  image         String?
+  emailVerified Boolean   @default(false)
+  role          UserRole  @default(CUSTOMER)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Relations
+  accounts      Account[]
+  sessions      Session[]
+  vendorProfile VendorProfile?
+  orders        Order[]
+  reviews       Review[]
+  cart          Cart?
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Passkey Models
+model Passkey {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  credentialId    String   @unique
+  publicKey       String
+  counter         BigInt
+  deviceType      String?
+  transports      String?
+  name            String?
+  backupEligible  Boolean  @default(false)
+  backupStatus    Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  lastUsedAt      DateTime?
+}
+
+// 2FA Models
+model TwoFactorSecret {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  secret    String
+  enabled   Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model TwoFactorInvalidate {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  code      String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+// Ecommerce Models
+model VendorProfile {
+  id                String             @id @default(cuid())
+  userId            String             @unique
+  user              User               @relation(fields: [userId], references: [id])
+  businessName      String
+  businessEmail     String             @unique
+  verificationStatus VerificationStatus @default(PENDING)
+  commissionRate    Decimal            @default(0.10)
+  businessDetails   Json
+  bankAccount       Json?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  
+  products          Product[]
+}
+
+model Category {
+  id          String     @id @default(cuid())
+  name        String     @unique
+  slug        String     @unique
+  description String?
+  icon        String?
+  parentId    String?
+  parent      Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children    Category[] @relation("CategoryHierarchy")
+  products    Product[]
+  createdAt   DateTime   @default(now())
+}
+
+model Product {
+  id           String   @id @default(cuid())
+  vendorId     String
+  vendor       VendorProfile @relation(fields: [vendorId], references: [id])
+  title        String
+  description  String
+  basePrice    Decimal
+  comparePrice Decimal?
+  categoryId   String
+  category     Category @relation(fields: [categoryId], references: [id])
+  
+  // Flexible attributes
+  attributes   Json
+  images       String[]
+  tags         String[]
+  
+  // Status
+  isActive     Boolean  @default(true)
+  isFeatured   Boolean  @default(false)
+  
+  inventory    ProductInventory?
+  reviews      Review[]
+  cartItems    CartItem[]
+  orderItems   OrderItem[]
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model ProductInventory {
+  id           String   @id @default(cuid())
+  productId    String   @unique
+  product      Product  @relation(fields: [productId], references: [id])
+  quantity     Int      @default(0)
+  reserved     Int      @default(0)
+  lowStockThreshold Int @default(10)
+  lastUpdated  DateTime @default(now())
+}
+
+model Cart {
+  id        String     @id @default(cuid())
+  userId    String     @unique
+  user      User       @relation(fields: [userId], references: [id])
+  items     CartItem[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+model CartItem {
+  id        String   @id @default(cuid())
+  cartId    String
+  cart      Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id])
+  quantity  Int
+  
+  @@unique([cartId, productId])
+}
+
+model Order {
+  id              String       @id @default(cuid())
+  userId          String
+  user            User         @relation(fields: [userId], references: [id])
+  orderNumber     String       @unique
+  totalAmount     Decimal
+  status          OrderStatus  @default(PENDING)
+  shippingAddress Json
+  billingAddress  Json?
+  paymentMethod   String
+  paymentStatus   PaymentStatus @default(PENDING)
+  
+  items           OrderItem[]
+  payment         Payment?
+  
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+}
+
+model OrderItem {
+  id        String   @id @default(cuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id])
+  quantity  Int
+  unitPrice Decimal
+  vendorId  String
+  
+  createdAt DateTime @default(now())
+}
+
+model Payment {
+  id              String        @id @default(cuid())
+  orderId         String        @unique
+  order           Order         @relation(fields: [orderId], references: [id])
+  amount          Decimal
+  currency        String        @default("USD")
+  status          PaymentStatus
+  paymentMethod   String
+  paymentIntentId String?       // For Stripe
+  metadata        Json?
+  
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+model Review {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  productId String
+  product   Product  @relation(fields: [productId], references: [id])
+  rating    Int
+  comment   String?
+  isVerified Boolean @default(false)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@unique([userId, productId])
+}
+
+// Enums
+enum UserRole {
+  CUSTOMER
+  VENDOR
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum VerificationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum OrderStatus {
+  PENDING
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+```
+
+### **6. Create Prisma Client Instance**
+
+Create `lib/prisma.ts`:
+
+```typescript
+// lib/prisma.ts
+import { PrismaClient } from '@prisma/client'
+
+const globalForPrisma = globalThis as unknown as {
+  prisma: PrismaClient | undefined
+}
+
+export const prisma = globalForPrisma.prisma ?? new PrismaClient()
+
+if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
+```
+
+### **7. Configure BetterAuth with Neon**
+
+Create `lib/auth.ts`:
+
+```typescript
+// lib/auth.ts
+import { betterAuth } from "better-auth"
+import { prisma } from "@/lib/prisma"
+import { twoFactor } from "better-auth/plugins"
+
+export const auth = betterAuth({
+  database: prisma,
+  
+  // Base configuration
+  emailAndPassword: {
+    enabled: true,
+    requireEmailVerification: true
+  },
+  
+  // Passkeys
+  passkey: {
+    enabled: true,
+    origin: process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
+    rpName: "Clicon Ecommerce",
+    rpID: process.env.RP_ID || "localhost",
+  },
+  
+  // 2FA Plugin
+  plugins: [
+    twoFactor({
+      totp: {
+        enabled: true,
+        issuer: "Clicon Ecommerce",
+        digits: 6,
+        period: 30,
+      },
+      backupCodes: {
+        enabled: true,
+        count: 10
+      }
+    })
+  ],
+  
+  // Session configuration
+  session: {
+    expiresIn: 60 * 60 * 24 * 7, // 7 days
+    updateAge: 60 * 60 * 24, // 1 day
+    cookieCache: {
+      enabled: true,
+      maxAge: 5 * 60 // 5 minutes
+    }
+  },
+  
+  // Advanced configuration
+  advanced: {
+    generateId: () => crypto.randomUUID(),
+    crossSubDomainCookies: {
+      enabled: false
+    }
+  }
+})
+```
+
+### **8. Push Schema to Neon**
+
+```bash
+# Generate Prisma client
+npx prisma generate
+
+# Push schema to Neon (creates tables)
+npx prisma db push
+
+# Open Prisma Studio to view your database
+npx prisma studio
+```
+
+### **9. Neon-Specific Optimizations**
+
+For better performance with Neon, add this to your `.env`:
+
+```env
+# Direct connection URL for migrations (bypasses connection pooler)
+DIRECT_URL="postgresql://username:password@ep-xyz.region.aws.neon.tech/neondb?sslmode=require"
+
+# Connection pooler for application queries
+DATABASE_URL="postgresql://username:password@ep-xyz.region.aws.neon.tech/neondb?sslmode=require&pgbouncer=true"
+```
+
+### **10. Add Neon-Specific Indexes**
+
+Create a migration for performance optimizations:
+
+```bash
+npx prisma migrate dev --name add_performance_indexes
+```
+
+In the migration file, add:
+
+```sql
+-- Performance indexes for ecommerce
+CREATE INDEX idx_products_vendor ON "Product"("vendorId");
+CREATE INDEX idx_products_category ON "Product"("categoryId");
+CREATE INDEX idx_products_price ON "Product"("basePrice");
+CREATE INDEX idx_products_active ON "Product"("isActive") WHERE "isActive" = true;
+CREATE INDEX idx_products_featured ON "Product"("isFeatured") WHERE "isFeatured" = true;
+
+-- Full-text search index
+CREATE INDEX idx_products_search ON "Product" USING GIN(
+  to_tsvector('english', "title" || ' ' || "description")
+);
+
+-- Order indexes
+CREATE INDEX idx_orders_user ON "Order"("userId");
+CREATE INDEX idx_orders_status ON "Order"("status");
+CREATE INDEX idx_orders_created ON "Order"("createdAt" DESC);
+
+-- Inventory indexes
+CREATE INDEX idx_inventory_product ON "ProductInventory"("productId");
+CREATE INDEX idx_inventory_low_stock ON "ProductInventory"("quantity") WHERE "quantity" <= "lowStockThreshold";
+```
+
+## **Development Workflow**
+
+### **Database Branching (Neon Feature)**
+
+```bash
+# Create a development branch
+npx neonctl branches create clicon-dev --parent-id your-project-id
+
+# Switch to development branch
+# Update DATABASE_URL to point to dev branch
+```
+
+### **Local Development**
+
+```bash
+# Start development server
+npm run dev
+
+# Monitor database queries
+npx prisma studio
+
+# Reset database (careful!)
+npx prisma migrate reset
+```
+
+## **Production Deployment**
+
+### **Vercel Integration**
+
+1. Install Vercel Neon integration
+2. Add environment variables in Vercel:
+   ```
+   DATABASE_URL=your-neon-production-url
+   DIRECT_URL=your-neon-direct-url
+   BETTER_AUTH_SECRET=your-production-secret
+   ```
+
+### **Connection Pooling**
+
+For production, use Neon's connection pooler:
+
+```env
+# Production DATABASE_URL with connection pooling
+DATABASE_URL="postgresql://username:password@ep-xyz.region.aws.neon.tech/neondb?sslmode=require&pgbouncer=true&max_connections=10"
+```
+
+## **Monitoring & Backup**
+
+- **Neon Console**: Monitor performance, connections, storage
+- **Autoscaling**: Neon automatically scales based on load
+- **Backups**: Automatic daily backups with point-in-time recovery
+- **Time-travel**: Query database as it was at any point in time
+
+## **Cost Structure**
+
+- **Free Tier**: 0.5GB storage, ~200 hours compute/month
+- **Pro Tier**: $19/month for 8GB storage, 300 hours compute
+- **Scale**: Pay-as-you-go for additional storage and compute
+
+This setup gives you a production-ready, scalable database that integrates perfectly with your betterAuth authentication and Next.js frontend. The serverless nature of Neon means you don't have to worry about database management as you scale.
+
+Would you like me to help you with the next steps, such as setting up the API routes or integrating the authentication with your existing frontend components?
+)

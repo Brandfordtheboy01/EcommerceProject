@@ -1,0 +1,16 @@
+🏗️ Frontend Framework: Next.js 16 + React 19
+🔐 Authentication: supabaseAuth (passkeys + 2FA)
+🗄️ Database: Supabase PostgreSQL (Database + Storage)
+📊 ORM: Prisma
+🔌 API Layer: tRPC (type-safe APIs)
+⚡ Caching: Next.js built-in + React Query (Free!)
+📁 File Storage: Supabase Storage
+💳 Payments: Stripe Connect
+🔍 Search: PostgreSQL FTS
+📧 Email: Resend
+🎣 State Management: Zustand + React Query
+✅ Validation: Zod + React Hook Form
+🧪 Testing: Jest + Playwright
+🚨 Error Tracking: Sentry
+📈 Analytics: Vercel Analytics
+🚀 Deployment: Vercel
