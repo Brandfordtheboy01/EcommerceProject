@@ -7,10 +7,10 @@ export const trpc = createTRPCReact<AppRouter>();
 
 export function createTRPCClient() {
   return trpc.createClient({
-    transformer: superjson,
     links: [
       httpBatchLink({
         url: "/api/trpc",
+        transformer: superjson,
       }),
     ],
   });
