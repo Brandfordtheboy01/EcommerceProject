@@ -14,3 +14,5 @@
 🚨 Error Tracking: Sentry
 📈 Analytics: Vercel Analytics
 🚀 Deployment: Vercel
+
+npx --package=@prisma/client prisma db push

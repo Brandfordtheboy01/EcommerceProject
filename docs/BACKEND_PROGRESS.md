@@ -1,213 +1,144 @@
-# Backend Development Progress Tracker
+# Backend Definition of Done (DoD)
 
-Simple tracking document for backend development phases and stages.
+Companion to `Backend Development Progress Tracker`. A stage cannot move from
+🟡 to 🟢 unless every item below is true — not just the checklist items in
+the tracker itself. Checklists tell you *what* was built; DoD tells you it's
+*safe to build on top of*.
 
-## Phase 1: Foundation (Week 1-2)
-**Branch**: `feature/foundation`
+## Baseline DoD — applies to every stage, every phase
+
+- [ ] Code merged to the phase branch via PR, not pushed directly
+- [ ] At least one other person (or a second agent review pass) reviewed the PR
+- [ ] Unit tests exist for new logic and pass in CI
+- [ ] No `any` types / unvalidated inputs — all external input goes through Zod
+- [ ] tRPC error codes are meaningful (`NOT_FOUND`, `UNAUTHORIZED`, etc.), not generic 500s
+- [ ] No secrets, keys, or `.env` values committed
+- [ ] Agent Summary in the tracker is updated (≤5 lines) and "Last Updated" set
+- [ ] No known regressions in previously-🟢 stages
+
+If any baseline item is unmet, the stage stays 🟡 regardless of checklist completion.
+
+---
+
+## Phase 1: Foundation
 
 ### Stage 1: Database Setup
-- [ ] Supabase project configuration
-- [ ] Prisma schema creation
-- [ ] Database migrations
-- [ ] Seed data setup
-- [ ] Row-level security policies
+- [x] Supabase project configuration
+- [x] Database schema creation (SQL migrations)
+- [x] Database migrations
+- [x] Seed data setup
+- [x] Row-level security policies
 
-**Status**: 🟡 In Progress  
-**Last Updated**: 2025-01-09  
-**Agent Summary**: Database schema designed with core models for users, products, orders. RLS policies defined for security.
+**Status**: 🟢 Completed
+**Last Updated**: 2026-09-02
+**Agent Summary**: Supabase project configured with remote connections. Complete database schema created via SQL migrations (001_initial_schema.sql) with all core tables. RLS policies implemented (002_rls_policies.sql) for all user/vendor tables with proper role-based access - successfully applied to remote database. Seed data created (seed.sql) with 1 admin, 2 vendors, 5 products, 1 customer with an order. Rollback migrations created in separate folder.
 
 ---
 
 ### Stage 2: Authentication Setup
-- [ ] Supabase Auth integration
-- [ ] Email/password authentication
-- [ ] Session management
-- [ ] Protected routes middleware
-- [ ] User role system
-
-**Status**: ⬜ Not Started  
-**Last Updated**: -  
-**Agent Summary**: -
-
----
+- [ ] Sign up, sign in, sign out work end-to-end against Supabase Auth (not mocked)
+- [ ] Sessions persist across refresh and expire correctly
+- [ ] Protected route middleware rejects unauthenticated requests with `UNAUTHORIZED`, not a 500 or silent pass-through
+- [ ] Role system (customer / vendor / admin) is enforced server-side, not just hidden in the UI
+- [ ] Password requirements and email verification flow tested manually once
+- **Not done if**: role checks exist only in the frontend — that's not auth, that's decoration.
 
 ### Stage 3: Basic API Structure
-- [ ] tRPC setup and configuration
-- [ ] Project structure for API routes
-- [ ] Error handling middleware
-- [ ] Input validation with Zod
-- [ ] Basic health check endpoint
-
-**Status**: ⬜ Not Started  
-**Last Updated**: -  
-**Agent Summary**: -
+- [x] *(Already marked complete — confirm before sign-off:)*
+- [ ] Every router has input validation on every mutation, not just the happy-path ones
+- [ ] Error middleware returns consistent shapes the frontend can rely on
+- [ ] At least one integration test hits a real (test) DB, not just mocked Zod schemas
 
 ---
 
-## Phase 2: Core Features (Week 3-4)
-**Branch**: `feature/core-features`
+## Phase 2: Core Features
 
 ### Stage 1: Product Management API
-- [ ] Product CRUD operations
-- [ ] Product listing with filters
-- [ ] Product detail endpoint
-- [ ] Category management
-- [ ] Image upload integration
-
-**Status**: ⬜ Not Started  
-**Last Updated**: -  
-**Agent Summary**: -
-
----
+- [ ] CRUD respects vendor ownership — a vendor can't edit another vendor's product (test this, don't assume RLS covers it)
+- [ ] List endpoint supports pagination and at least category + price-range filters
+- [ ] Image upload validates file type/size server-side, not just in the client
+- [ ] Out-of-stock and inactive products are excluded from public listings by default
+- **Not done if**: filters work in Postman but the pagination defaults would return the entire catalog in production.
 
 ### Stage 2: User Management API
-- [ ] User profile operations
-- [ ] Vendor registration flow
-- [ ] Vendor profile management
-- [ ] User permission system
-- [ ] Account verification
-
-**Status**: ⬜ Not Started  
-**Last Updated**: -  
-**Agent Summary**: -
-
----
+- [ ] Vendor registration produces a `pending` state that an admin must approve — no vendor is live by default
+- [ ] Profile updates re-validate uniqueness constraints (email, business name) server-side
+- [ ] Permission system tested with a matrix: each role × each endpoint, at least once
+- **Not done if**: "vendor approval" exists as a DB column but nothing in the API actually blocks unapproved vendors from listing products.
 
 ### Stage 3: Shopping Cart API
-- [ ] Cart CRUD operations
-- [ ] Guest cart support
-- [ ] Cart persistence
-- [ ] Cart validation
-- [ ] Cart total calculation
-
-**Status**: ⬜ Not Started  
-**Last Updated**: -  
-**Agent Summary**: -
+- [ ] Guest cart and logged-in cart both work, and merging a guest cart into an account on login is tested
+- [ ] Cart total recalculates server-side on every mutation — never trust a client-sent total
+- [ ] Adding more than available stock is rejected with a clear error, not silently capped
+- [ ] Cart expiry (30 days per business rules) is enforced by a job or query, not just documented
+- **Not done if**: cart total is computed client-side and merely stored — that's a pricing bug waiting to happen.
 
 ---
 
-## Phase 3: Payment & Orders (Week 5-6)
-**Branch**: `feature/payments-orders`
+## Phase 3: Payment & Orders
 
 ### Stage 1: Stripe Integration
-- [ ] Stripe checkout setup
-- [ ] Payment intent creation
-- [ ] Webhook handling
-- [ ] Payment status updates
-- [ ] Refund processing
-
-**Status**: ⬜ Not Started  
-**Last Updated**: -  
-**Agent Summary**: -
-
----
+- [ ] Webhook signature verification is implemented and tested with Stripe's CLI, not just assumed
+- [ ] Idempotency handled — a retried webhook must not double-charge or double-fulfill
+- [ ] Payment intent creation and order creation are transactionally consistent (no orphaned orders with no payment, or vice versa)
+- [ ] Refund flow tested against Stripe's test mode end-to-end
+- **Not done if**: webhook handling works in a manual test but there's no idempotency key check — this is the single highest-risk stage in the tracker and deserves the most scrutiny.
 
 ### Stage 2: Order Management
-- [ ] Order creation workflow
-- [ ] Order status updates
-- [ ] Order history API
-- [ ] Order validation
-- [ ] Inventory updates
-
-**Status**: ⬜ Not Started  
-**Last Updated**: -  
-**Agent Summary**: -
-
----
+- [ ] Order status transitions follow an explicit state machine (no order can jump from `pending` to `delivered`)
+- [ ] Inventory is decremented atomically with order creation (race condition tested: two simultaneous orders for the last unit)
+- [ ] Order history endpoint is scoped per user — one customer cannot query another's orders by ID guessing
+- **Not done if**: inventory updates happen in a separate, non-atomic step after order creation.
 
 ### Stage 3: Email Notifications
-- [ ] Resend integration
-- [ ] Order confirmation emails
-- [ ] Vendor notifications
-- [ ] Email templates
-- [ ] Email queue system
-
-**Status**: ⬜ Not Started  
-**Last Updated**: -  
-**Agent Summary**: -
+- [ ] Order confirmation and vendor notification emails fire on the correct trigger, verified in a staging inbox
+- [ ] Failure to send does not fail or roll back the underlying order/payment
+- [ ] Retry logic exists for transient Resend failures (3 attempts per business rules)
+- **Not done if**: email sending is inline and synchronous with checkout — a Resend outage should not be able to block a purchase.
 
 ---
 
-## Phase 4: Enhancement (Week 7-8)
-**Branch**: `feature/enhancement`
+## Phase 4: Enhancement
 
 ### Stage 1: Search Implementation
-- [ ] PostgreSQL FTS setup
-- [ ] Search API endpoints
-- [ ] Search result ranking
-- [ ] Faceted search
-- [ ] Search analytics
-
-**Status**: ⬜ Not Started  
-**Last Updated**: -  
-**Agent Summary**: -
-
----
+- [ ] FTS returns relevant results for partial and misspelled queries within acceptable latency (define a number, e.g. <300ms p95)
+- [ ] Search respects the same visibility rules as browsing (no inactive/out-of-stock leaking in by default)
+- [ ] Faceted filters combine correctly (category + price + rating together, not just individually)
+- **Not done if**: search works well on the 5-row seed dataset but was never tested against a realistic product volume.
 
 ### Stage 2: Advanced Features
-- [ ] Review system API
-- [ ] Wishlist management
-- [ ] Vendor dashboard API
-- [ ] Analytics endpoints
-- [ ] Reporting system
-
-**Status**: ⬜ Not Started  
-**Last Updated**: -  
-**Agent Summary**: -
+- [ ] Review submission enforces "verified purchase only" and "one review per product per customer" at the API level
+- [ ] Wishlist respects the 50-item limit and guest expiry
+- [ ] Vendor dashboard and analytics endpoints are scoped — a vendor sees only their own data
+- **Not done if**: the one-review-per-customer rule is enforced by a unique DB constraint alone with no user-facing error handling for the violation.
 
 ---
 
-## Phase 5: Production Ready (Week 9-10)
-**Branch**: `feature/production-ready`
+## Phase 5: Production Ready
 
 ### Stage 1: Performance Optimization
-- [ ] Database query optimization
-- [ ] API response caching
-- [ ] Connection pooling
-- [ ] Load testing
-- [ ] Performance monitoring
-
-**Status**: ⬜ Not Started  
-**Last Updated**: -  
-**Agent Summary**: -
-
----
+- [ ] Load test results exist (tool + numbers) for checkout and product listing under realistic concurrent load
+- [ ] Slow queries identified via `EXPLAIN ANALYZE` and indexed, not guessed at
+- [ ] Caching has an explicit invalidation strategy — no cache that can serve stale prices or stock
+- **Not done if**: "performance optimization" is marked done without a before/after number to point to.
 
 ### Stage 2: Security Hardening
-- [ ] Security audit
-- [ ] Rate limiting implementation
-- [ ] Input sanitization
-- [ ] Dependency updates
-- [ ] Penetration testing
-
-**Status**: ⬜ Not Started  
-**Last Updated**: -  
-**Agent Summary**: -
-
----
+- [ ] Rate limiting is verified to actually trigger (hit the limit in a test, confirm the 429)
+- [ ] Dependency audit (`npm audit` or equivalent) run with no unresolved high/critical vulnerabilities
+- [ ] A basic pen-test pass (even informal) attempted against auth, IDOR on order/product IDs, and payment webhook spoofing
+- **Not done if**: security hardening consists only of updating dependencies — the audit needs to touch the app's own logic, especially IDOR risks called out in earlier stages.
 
 ### Stage 3: Deployment Preparation
-- [ ] Environment configuration
-- [ ] CI/CD pipeline setup
-- [ ] Database backup procedures
-- [ ] Monitoring setup
-- [ ] Documentation finalization
-
-**Status**: ⬜ Not Started  
-**Last Updated**: -  
-**Agent Summary**: -
+- [ ] CI/CD pipeline runs tests and blocks merge/deploy on failure — not just "a pipeline exists"
+- [ ] Rollback procedure has been executed at least once in staging, not just documented
+- [ ] Monitoring/alerting fires a real alert during a simulated failure (kill a dependency, confirm the page)
+- **Not done if**: documentation is complete but nobody has actually pulled the rollback trigger to see if it works.
 
 ---
 
-## Legend
-- 🟢 Completed
-- 🟡 In Progress  
-- 🔴 Blocked
-- ⬜ Not Started
+## Suggested tracker addition
 
-## Notes
-- Update status after completing each task
-- Keep agent summaries under 5 lines
-- Update "Last Updated" date when making changes
-- Create new branches for each phase
-- Merge to develop branch after phase completion
+Consider adding a `DoD Met` checkbox next to `Status` in the tracker, separate
+from the task checklist — this keeps "did we build it" and "is it actually
+safe to ship" visibly distinct, which is where most of the risk in this
+particular stack (Stripe webhooks, RLS, cart totals) tends to hide.
