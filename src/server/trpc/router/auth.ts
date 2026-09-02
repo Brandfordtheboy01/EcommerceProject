@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { router, publicProcedure, protectedProcedure } from "../init";
-import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 
 export const authRouter = router({
@@ -47,17 +46,22 @@ export const authRouter = router({
         throw new Error(error.message);
       }
 
-      // Create user record in our database
+      // Create user record in our database via Supabase
       if (data.user) {
-        await prisma.user.create({
-          data: {
+        const supabase = await createClient();
+        const { error: dbError } = await supabase
+          .from('users')
+          .insert({
             id: data.user.id,
             email: input.email,
             name: input.name,
             role: input.role,
-            emailVerified: false,
-          },
-        });
+            email_verified: false,
+          });
+
+        if (dbError) {
+          throw new Error(dbError.message);
+        }
       }
 
       return { success: true, user: data.user };
