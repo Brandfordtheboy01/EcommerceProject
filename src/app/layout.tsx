@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import Header from "@/components/Header";
+import TRPCProvider from "./providers";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -18,9 +19,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <Header />
-        {children}
-        <footer className="border-t bg-muted/40 py-12 mt-16">
+        <TRPCProvider>
+          <Header />
+          {children}
+          <footer className="border-t bg-muted/40 py-12 mt-16">
           <div className="container mx-auto px-4 grid grid-cols-2 md:grid-cols-4 gap-8">
             <div>
               <h3 className="font-semibold mb-4">About Us</h3>
@@ -60,6 +62,7 @@ export default function RootLayout({
             © 2026 MultiVendor Storefront. All rights reserved.
           </div>
         </footer>
+        </TRPCProvider>
       </body>
     </html>
   );
