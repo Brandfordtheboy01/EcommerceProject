@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input"
 import { GalleryVerticalEndIcon } from "lucide-react"
 import { toast } from "sonner"
 
-export function LoginForm({
+export function SignupForm({
   className,
   ...props
 }: React.ComponentProps<"div">) {
@@ -23,6 +23,8 @@ export function LoginForm({
   const [formData, setFormData] = useState({
     email: "",
     password: "",
+    name: "",
+    role: "CUSTOMER" as "CUSTOMER" | "VENDOR",
   })
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -30,7 +32,7 @@ export function LoginForm({
     setIsLoading(true)
 
     try {
-      const response = await fetch('/api/trpc/auth.signIn', {
+      const response = await fetch('/api/trpc/auth.signUp', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -43,14 +45,13 @@ export function LoginForm({
       const result = await response.json()
       
       if (result.result && result.result.data && result.result.data.success) {
-        toast.success("Login successful!")
-        router.push("/")
-        router.refresh()
+        toast.success(result.result.data.message || "Account created successfully!")
+        router.push("/login")
       } else {
-        throw new Error(result.error?.message || "Login failed")
+        throw new Error(result.error?.message || "Signup failed")
       }
     } catch (error: any) {
-      toast.error(error.message || "Login failed")
+      toast.error(error.message || "Signup failed")
     } finally {
       setIsLoading(false)
     }
@@ -70,11 +71,23 @@ export function LoginForm({
               </div>
               <span className="sr-only">MultiVendor Storefront</span>
             </a>
-            <h1 className="text-xl font-bold">Welcome Back</h1>
+            <h1 className="text-xl font-bold">Create Account</h1>
             <FieldDescription>
-              Don&apos;t have an account? <a href="/signup" className="text-blue-600 hover:underline">Sign up</a>
+              Already have an account? <a href="/login" className="text-blue-600 hover:underline">Sign in</a>
             </FieldDescription>
           </div>
+          <Field>
+            <FieldLabel htmlFor="name">Full Name</FieldLabel>
+            <Input
+              id="name"
+              type="text"
+              placeholder="John Doe"
+              required
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              disabled={isLoading}
+            />
+          </Field>
           <Field>
             <FieldLabel htmlFor="email">Email</FieldLabel>
             <Input
@@ -98,10 +111,26 @@ export function LoginForm({
               onChange={(e) => setFormData({ ...formData, password: e.target.value })}
               disabled={isLoading}
             />
+            <FieldDescription>
+              Must be at least 6 characters with uppercase, lowercase, and number
+            </FieldDescription>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="role">Account Type</FieldLabel>
+            <select
+              id="role"
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              value={formData.role}
+              onChange={(e) => setFormData({ ...formData, role: e.target.value as "CUSTOMER" | "VENDOR" })}
+              disabled={isLoading}
+            >
+              <option value="CUSTOMER">Customer</option>
+              <option value="VENDOR">Vendor</option>
+            </select>
           </Field>
           <Field>
             <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? "Signing in..." : "Sign In"}
+              {isLoading ? "Creating account..." : "Create Account"}
             </Button>
           </Field>
         </FieldGroup>

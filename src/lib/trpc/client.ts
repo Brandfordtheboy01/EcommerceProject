@@ -11,6 +11,10 @@ export function createTRPCClient() {
       httpBatchLink({
         url: "/api/trpc",
         transformer: superjson,
+        headers: () => {
+          // Automatically include cookies for authentication
+          return {};
+        },
       }),
     ],
   });

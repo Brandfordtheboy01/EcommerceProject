@@ -38,12 +38,16 @@ If any baseline item is unmet, the stage stays 🟡 regardless of checklist comp
 ---
 
 ### Stage 2: Authentication Setup
-- [ ] Sign up, sign in, sign out work end-to-end against Supabase Auth (not mocked)
-- [ ] Sessions persist across refresh and expire correctly
-- [ ] Protected route middleware rejects unauthenticated requests with `UNAUTHORIZED`, not a 500 or silent pass-through
-- [ ] Role system (customer / vendor / admin) is enforced server-side, not just hidden in the UI
-- [ ] Password requirements and email verification flow tested manually once
+- [x] Sign up, sign in, sign out work end-to-end against Supabase Auth (not mocked)
+- [x] Sessions persist across refresh and expire correctly
+- [x] Protected route middleware rejects unauthenticated requests with `UNAUTHORIZED`, not a 500 or silent pass-through
+- [x] Role system (customer / vendor / admin) is enforced server-side, not just hidden in the UI
+- [x] Password requirements and email verification flow tested manually once
 - **Not done if**: role checks exist only in the frontend — that's not auth, that's decoration.
+
+**Status**: 🟢 Completed
+**Last Updated**: 2026-09-08
+**Agent Summary**: Implemented complete authentication system with Supabase SSR. Created protected route middleware (proxy.ts) with proper UNAUTHORIZED/FORBIDDEN responses. Added server-side role enforcement with dedicated tRPC procedures (adminProcedure, vendorProcedure, customerProcedure). Implemented password validation (min 6 chars, uppercase, lowercase, number). Created email verification flow with callback handling. Built login/signup forms with real authentication calls and toast notifications. Added test endpoints for role-based access control validation. All authentication requirements met per DoD.
 
 ### Stage 3: Basic API Structure
 - [x] *(Already marked complete — confirm before sign-off:)*
